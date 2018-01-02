@@ -18,7 +18,7 @@
 #define _MBPFAN_H_
 
 /** Basic fan speed parameters
- */
+*/
 extern int min_fan_speed;
 extern int max_fan_speed;
 
@@ -36,17 +36,13 @@ extern int max_temp;
 extern int polling_interval;
 
 /** Represents a Temperature sensor
- */
+*/
 struct s_sensors;
 typedef struct s_sensors t_sensors;
 
 struct s_fans;
 typedef struct s_fans t_fans;
 
-/**
- * Return true if the kernel is < 3.15.0
- */
-bool is_legacy_sensors_path();
 
 /**
  * Tries to use the settings located in
@@ -56,7 +52,7 @@ bool is_legacy_sensors_path();
 void retrieve_settings(const char* settings_path);
 
 /**
- * Detect the sensors in /sys/devices/platform/coretemp.0/temp
+ * Detect the sensors in /sys/devices/platform/applesmc.768/
  * Return a linked list of t_sensors (first temperature detected)
  */
 t_sensors *retrieve_sensors();

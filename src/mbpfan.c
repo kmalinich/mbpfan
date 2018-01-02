@@ -33,7 +33,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
-#include <syslog.h>
 #include <stdbool.h>
 #include <sys/utsname.h>
 #include <sys/errno.h>
@@ -45,531 +44,374 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
-int min_fan_speed = 2000;
-int max_fan_speed = 6200;
+int min_fan_speed = 0;
+int max_fan_speed = 5600;
 
 /* temperature thresholds
  * low_temp - temperature below which fan speed will be at minimum
  * high_temp - fan will increase speed when higher than this temperature
  * max_temp - fan will run at full speed above this temperature */
-int low_temp = 63;   // try ranges 55-63
-int high_temp = 66;  // try ranges 58-66
-int max_temp = 86;   // do not set it > 90
+int low_temp  = 35;  // try ranges 55-63
+int high_temp = 45;  // try ranges 58-66
+int max_temp  = 55;  // do not set it > 90
 
-int polling_interval = 7;
+int polling_interval = 2;
 
 t_sensors* sensors = NULL;
 t_fans* fans = NULL;
 
 
 static char *smprintf(const char *fmt, ...) __attribute__((format (printf, 1, 2)));
-static char *smprintf(const char *fmt, ...)
-{
-    char *buf;
-    int cnt;
-    va_list ap;
+static char *smprintf(const char *fmt, ...) {
+	char *buf;
+	int cnt;
+	va_list ap;
 
-    // find buffer length
-    va_start(ap, fmt);
-    cnt = vsnprintf(NULL, 0, fmt, ap);
-    va_end(ap);
-    if (cnt < 0) {
-        return NULL;
-    }
+	// find buffer length
+	va_start(ap, fmt);
+	cnt = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
 
-    // create and write to buffer
-    buf = malloc(cnt + 1);
-    va_start(ap, fmt);
-    vsnprintf(buf, cnt + 1, fmt, ap);
-    va_end(ap);
-    return buf;
+	if (cnt < 0) {
+		return NULL;
+	}
+
+	// create and write to buffer
+	buf = malloc(cnt + 1);
+	va_start(ap, fmt);
+	vsnprintf(buf, cnt + 1, fmt, ap);
+	va_end(ap);
+	return buf;
 }
 
-bool is_legacy_sensors_path()
-{
-    struct utsname kernel;
-    uname(&kernel);
+t_sensors *retrieve_sensors() {
+	t_sensors *sensors_head = NULL;
+	t_sensors *s = NULL;
 
-    char *str_kernel_version;
-    str_kernel_version = strtok(kernel.release, ".");
+	char *path_input = NULL;
+	char *path_label = NULL;
 
-    if (atoi(str_kernel_version) < 3){
-        syslog(LOG_INFO, "mbpfan detected a pre-3.x.x linux kernel. Detected version: %s. Exiting.\n", kernel.release);
-        printf("mbpfan detected a pre-3.x.x linux kernel. Detected version: %s. Exiting.\n", kernel.release);
-        exit(EXIT_FAILURE);
-    }
+	const char *path_begin     = "/sys/devices/platform/applesmc.768/temp";
+	const char *path_end_input = "_input";
+	const char *path_end_label = "_label";
 
-    
-    // thanks http://stackoverflow.com/questions/18192998/plain-c-opening-a-directory-with-fopen
-    fopen("/sys/devices/platform/coretemp.0/hwmon", "wb");
+	printf("Looking for temperature sensors under %s\n", path_begin);
 
-    if (errno == EISDIR) {
-        return 0;
-    } else {
-        return 1;
-    }
+	int counter       = 3;
+	int sensors_found = 0;
 
-    // 
-    // str_kernel_version = strtok(NULL, ".");
-    // int kernel_version = atoi(str_kernel_version);
+	for (counter = 3; counter < 4; counter++) {
+		printf("Checking temperature sensor temp%d\n", counter);
 
-    // if(verbose) {
-    //     printf("Detected kernel version: %s\n", kernel.release);
-    //     printf("Detected kernel minor revision: %s\n", str_kernel_version);
+		path_input = smprintf("%s%d%s", path_begin, counter, path_end_input);
+		path_label = smprintf("%s%d%s", path_begin, counter, path_end_label);
 
-    //     if(daemonize) {
-    //         syslog(LOG_INFO, "Kernel version: %s", kernel.release);
-    //         syslog(LOG_INFO, "Detected kernel minor revision: %s", str_kernel_version);
-    //     }
-    // }
+		FILE *file_input = fopen(path_input, "r");
+		FILE *file_label = fopen(path_label, "r");
 
-    // return (atoi(kernel.release) == 3 && kernel_version < 15);
+		if (file_input != NULL) {
+			s = (t_sensors *) malloc(sizeof(t_sensors));
+
+			s->path_sensor_input = strdup(path_input);
+			s->path_sensor_label = strdup(path_label);
+
+			fscanf(file_input, "%d", &s->temperature);
+			fscanf(file_label, "%s", &s->label);
+
+			if (sensors_head == NULL) {
+				sensors_head = s;
+				sensors_head->next = NULL;
+			}
+			else {
+				t_sensors *tmp = sensors_head;
+
+				while (tmp->next != NULL) {
+					tmp = tmp->next;
+				}
+
+				tmp->next = s;
+				tmp->next->next = NULL;
+			}
+
+			s->file_input = file_input;
+			s->file_label = file_label;
+			sensors_found++;
+		}
+
+		free(path_input); path_input = NULL;
+		free(path_label); path_label = NULL;
+	}
+
+	printf("Found %d temperature sensors\n", sensors_found);
+
+	if (sensors_found == 0) {
+		printf("ERROR: mbpfan could not detect any temperature sensors. Please contact the developer.\n");
+		exit(EXIT_FAILURE);
+	}
+
+	return sensors_head;
 }
 
+t_fans *retrieve_fans() {
+	t_fans *fans_head = NULL;
+	t_fans *fan = NULL;
 
-t_sensors *retrieve_sensors()
-{
+	char *path_output = NULL;
+	char *path_manual = NULL;
 
-    t_sensors *sensors_head = NULL;
-    t_sensors *s = NULL;
+	const char *path_begin      = "/sys/devices/platform/applesmc.768/fan";
+	const char *path_end_output = "_output";
+	const char *path_end_manual = "_manual";
 
-    char *path = NULL;
-    char *path_begin = NULL;
+	printf("Looking for fans under %s\n", path_begin);
 
-    if (is_legacy_sensors_path()) {
-        if(verbose) {
-            printf("Using legacy sensor path for kernel < 3.15.0\n");
+	int counter    = 1;
+	int fans_found = 0;
 
-            if(daemonize) {
-                syslog(LOG_INFO, "Using legacy path for kernel < 3.15.0");
-            }
-        }
+	for (counter = 1; counter < 7; counter++) {
+		printf("Checking fan fan%d\n", counter);
 
-        path_begin = strdup("/sys/devices/platform/coretemp.0/temp");
+		path_output = smprintf("%s%d%s", path_begin, counter, path_end_output);
+		path_manual = smprintf("%s%d%s", path_begin, counter, path_end_manual);
 
-    } else {
+		FILE *file_output = fopen(path_output, "w");
 
-        if(verbose) {
-            printf("Using new sensor path for kernel >= 3.15.0 or some CentOS versions with kernel 3.10.0\n");
+		if (file_output != NULL) {
+			fan = (t_fans *) malloc(sizeof(t_fans));
+			fan->path_fan_output = strdup(path_output);
+			fan->path_fan_manual = strdup(path_manual);
 
-            if(daemonize) {
-                syslog(LOG_INFO, "Using new sensor path for kernel >= 3.15.0 or some CentOS versions with kernel 3.10.0 ");
-            }
-        }
+			if (fans_head == NULL) {
+				fans_head = fan;
+				fans_head->next = NULL;
+			}
+			else {
+				t_fans *tmp = fans_head;
 
-        path_begin = strdup("/sys/devices/platform/coretemp.0/hwmon/hwmon");
+				while (tmp->next != NULL) {
+					tmp = tmp->next;
+				}
 
-        int counter;
-        for (counter = 0; counter < 10; counter++) {
+				tmp->next = fan;
+				tmp->next->next = NULL;
+			}
 
-            char hwmon_path[strlen(path_begin)+2];
+			fan->file_output = file_output;
+			fans_found++;
+		}
 
-            sprintf(hwmon_path, "%s%d", path_begin, counter);
+		free(path_output); path_output = NULL;
+		free(path_manual); path_manual = NULL;
+	}
 
-            // thanks http://stackoverflow.com/questions/18192998/plain-c-opening-a-directory-with-fopen
-            fopen(hwmon_path, "wb");
+	printf("Found %d fans\n", fans_found);
 
-            if (errno == EISDIR) {
+	if (fans_found == 0) {
+		printf("ERROR: mbpfan could not detect any fans. Please contact the developer.\n");
+		exit(EXIT_FAILURE);
+	}
 
-                path_begin = smprintf("%s/temp", hwmon_path);
-
-                if(verbose) {
-                    printf("Found hwmon path at %s\n", path_begin);
-
-                    if(daemonize) {
-                        syslog(LOG_INFO, "Found hwmon path at %s\n", path_begin);
-                    }
-
-                }
-
-                break;
-            }
-        }
-    }
-
-    const char *path_end = "_input";
-
-    int sensors_found = 0;
-
-    int counter = 0;
-    for(counter = 0; counter<10; counter++) {
-        path = smprintf("%s%d%s", path_begin, counter, path_end);
-
-        FILE *file = fopen(path, "r");
-
-        if(file != NULL) {
-            s = (t_sensors *) malloc( sizeof( t_sensors ) );
-            s->path = strdup(path);
-            fscanf(file, "%d", &s->temperature);
-
-            if (sensors_head == NULL) {
-                sensors_head = s;
-                sensors_head->next = NULL;
-
-            } else {
-                t_sensors *tmp = sensors_head;
-
-                while (tmp->next != NULL) {
-                    tmp = tmp->next;
-                }
-
-                tmp->next = s;
-                tmp->next->next = NULL;
-            }
-
-            s->file = file;
-            sensors_found++;
-        }
-
-        free(path);
-        path = NULL;
-    }
-
-    if(verbose) {
-        printf("Found %d sensors\n", sensors_found);
-
-        if(daemonize) {
-            syslog(LOG_INFO, "Found %d sensors", sensors_found);
-        }
-    }
-
-    if (sensors_found == 0){
-        syslog(LOG_CRIT, "mbpfan could not detect any temp sensor. Please contact the developer.\n");
-        printf("mbpfan could not detect any temp sensor. Please contact the developer.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    free(path_begin);
-    path_begin = NULL;
-
-    return sensors_head;
+	return fans_head;
 }
 
 
-t_fans *retrieve_fans()
-{
+static void set_fans_mode(t_fans *fans, int mode) {
+	t_fans *tmp = fans;
+	FILE *file;
 
-    t_fans *fans_head = NULL;
-    t_fans *fan = NULL;
+	printf("Setting fans to manual control\n");
 
-    char *path_output = NULL;
-    char *path_manual = NULL;
+	while (tmp != NULL) {
+		file = fopen(tmp->path_fan_manual, "rw+");
 
-    const char *path_begin = "/sys/devices/platform/applesmc.768/fan";
-    const char *path_output_end = "_output";
-    const char *path_man_end = "_manual";
+		if (file != NULL) {
+			fprintf(file, "%d", mode);
+			fclose(file);
+		}
 
-    int counter = 0;
-    int fans_found = 0;
+		tmp = tmp->next;
+	}
+}
 
-    for(counter = 0; counter<10; counter++) {
+void set_fans_man(t_fans *fans) {
+	set_fans_mode(fans, 1);
+}
 
-        path_output = smprintf("%s%d%s", path_begin, counter, path_output_end);
-        path_manual = smprintf("%s%d%s", path_begin, counter, path_man_end);
-
-        FILE *file = fopen(path_output, "w");
-
-        if(file != NULL) {
-            fan = (t_fans *) malloc( sizeof( t_fans ) );
-            fan->fan_output_path = strdup(path_output);
-            fan->fan_manual_path = strdup(path_manual);
-
-            if (fans_head == NULL) {
-                fans_head = fan;
-                fans_head->next = NULL;
-
-            } else {
-                t_fans *tmp = fans_head;
-
-                while (tmp->next != NULL) {
-                    tmp = tmp->next;
-                }
-
-                tmp->next = fan;
-                tmp->next->next = NULL;
-            }
-
-            fan->file = file;
-            fans_found++;
-        }
-
-        free(path_output);
-        path_output = NULL;
-        free(path_manual);
-        path_manual = NULL;
-    }
-
-    if(verbose) {
-        printf("Found %d fans\n", fans_found);
-
-        if(daemonize) {
-            syslog(LOG_INFO, "Found %d fans", fans_found);
-        }
-    }
-
-    if (!fans_found > 0){
-        syslog(LOG_CRIT, "mbpfan could not detect any fan. Please contact the developer.\n");
-        printf("mbpfan could not detect any fan. Please contact the developer.\n");
-        exit(EXIT_FAILURE);
-    }
-
-
-    return fans_head;
+void set_fans_auto(t_fans *fans) {
+	set_fans_mode(fans, 0);
 }
 
 
-static void set_fans_mode(t_fans *fans, int mode)
-{
+t_sensors *refresh_sensors(t_sensors *sensors) {
+	t_sensors *tmp = sensors;
 
-    t_fans *tmp = fans;
-    FILE *file;
+	while (tmp != NULL) {
+		if (tmp->file_input != NULL) {
+			char buf[16];
+			int len = pread(fileno(tmp->file_input), buf, sizeof(buf), /*offset=*/ 0);
+			buf[len] = '\0';
+			sscanf(buf, "%d", &tmp->temperature);
+		}
 
-    while(tmp != NULL) {
-        file = fopen(tmp->fan_manual_path, "rw+");
+		tmp = tmp->next;
+	}
 
-        if(file != NULL) {
-            fprintf(file, "%d", mode);
-            fclose(file);
-        }
-
-        tmp = tmp->next;
-    }
-}
-
-void set_fans_man(t_fans *fans)
-{
-
-    set_fans_mode(fans, 1);
-}
-
-void set_fans_auto(t_fans *fans)
-{
-
-    set_fans_mode(fans, 0);
-}
-
-t_sensors *refresh_sensors(t_sensors *sensors)
-{
-
-    t_sensors *tmp = sensors;
-
-    while(tmp != NULL) {
-        if(tmp->file != NULL) {
-            char buf[16];
-            int len = pread(fileno(tmp->file), buf, sizeof(buf), /*offset=*/ 0);
-            buf[len] = '\0';
-            sscanf(buf, "%d", &tmp->temperature);
-        }
-
-        tmp = tmp->next;
-    }
-
-    return sensors;
+	return sensors;
 }
 
 
 /* Controls the speed of the fan */
-void set_fan_speed(t_fans* fans, int speed)
-{
-    t_fans *tmp = fans;
+void set_fan_speed(t_fans* fans, int speed) {
+	t_fans *tmp = fans;
 
-    while(tmp != NULL) {
-        if(tmp->file != NULL) {
-            char buf[16];
-            int len = snprintf(buf, sizeof(buf), "%d", speed);
-            pwrite(fileno(tmp->file), buf, len, /*offset=*/ 0);
-        }
+	while (tmp != NULL) {
+		if (tmp->file_output != NULL) {
+			char buf[16];
+			int len = snprintf(buf, sizeof(buf), "%d", speed);
+			pwrite(fileno(tmp->file_output), buf, len, /*offset=*/ 0);
+		}
 
-        tmp = tmp->next;
-    }
+		tmp = tmp->next;
+	}
+}
 
+unsigned short get_temp(t_sensors* sensors) {
+	sensors = refresh_sensors(sensors);
+	int sum_temp = 0;
+	unsigned short temp = 0;
+
+	t_sensors* tmp = sensors;
+
+	int number_sensors = 0;
+
+	while (tmp != NULL) {
+		sum_temp += tmp->temperature;
+		tmp = tmp->next;
+		number_sensors++;
+	}
+
+	// Just to be safe
+	if (number_sensors == 0) {
+		number_sensors++;
+	}
+
+	temp = (unsigned short)( ceil( (float)( sum_temp ) / (number_sensors * 1000) ) );
+	return temp;
 }
 
 
-unsigned short get_temp(t_sensors* sensors)
-{
-    sensors = refresh_sensors(sensors);
-    int sum_temp = 0;
-    unsigned short temp = 0;
+void retrieve_settings(const char* settings_path) {
+	Settings *settings = NULL;
+	int result = 0;
+	FILE *f = NULL;
 
-    t_sensors* tmp = sensors;
+	if (settings_path == NULL) {
+		f = fopen("/etc/mbpfan.conf", "r");
+	}
+	else {
+		f = fopen(settings_path, "r");
+	}
 
-    int number_sensors = 0;
+	if (f == NULL) {
+		/* Could not open configfile */
+		printf("Couldn't open configfile, using defaults\n");
+	}
+	else {
+		settings = settings_open(f);
+		fclose(f);
 
-    while(tmp != NULL) {
-        sum_temp += tmp->temperature;
-        tmp = tmp->next;
-        number_sensors++;
-    }
+		if (settings == NULL) {
+			/* Could not read configfile */
+			printf("Couldn't read configfile\n");
+		}
+		else {
+			printf("Read config file at /etc/mbpfan.conf\n");
 
-    // just to be safe
-    if (number_sensors == 0) {
-        number_sensors++;
-    }
+			/* Read configfile values */
+			result = settings_get_int(settings, "general", "min_fan_speed");
+			if (result != 0) { min_fan_speed = result; }
 
-    temp = (unsigned short)( ceil( (float)( sum_temp ) / (number_sensors * 1000) ) );
-    return temp;
+			result = settings_get_int(settings, "general", "max_fan_speed");
+			if (result != 0) { max_fan_speed = result; }
+
+			result = settings_get_int(settings, "general", "low_temp");
+			if (result != 0) { low_temp = result; }
+
+			result = settings_get_int(settings, "general", "high_temp");
+			if (result != 0) { high_temp = result; }
+
+			result = settings_get_int(settings, "general", "max_temp");
+			if (result != 0) { max_temp = result; }
+
+			result = settings_get_int(settings, "general", "polling_interval");
+			if (result != 0) { polling_interval = result; }
+
+			/* Destroy the settings object */
+			settings_delete(settings);
+		}
+	}
 }
 
 
-void retrieve_settings(const char* settings_path)
-{
-    Settings *settings = NULL;
-    int result = 0;
-    FILE *f = NULL;
+void mbpfan() {
+	int old_temp, new_temp, fan_speed, steps;
+	int temp_change;
+	int step_up, step_down;
 
-    if (settings_path == NULL) {
-        f = fopen("/etc/mbpfan.conf", "r");
+	retrieve_settings(NULL);
 
-    } else {
-        f = fopen(settings_path, "r");
-    }
+	printf("Retrieving sensors\n");
+	sensors = retrieve_sensors();
 
+	printf("Retrieving fans\n");
+	fans = retrieve_fans();
 
-    if (f == NULL) {
-        /* Could not open configfile */
-        if(verbose) {
-            printf("Couldn't open configfile, using defaults\n");
+	set_fans_man(fans);
 
-            if(daemonize) {
-                syslog(LOG_INFO, "Couldn't open configfile, using defaults");
-            }
-        }
+	new_temp = get_temp(sensors);
 
-    } else {
-        settings = settings_open(f);
-        fclose(f);
+	fan_speed = min_fan_speed;
+	set_fan_speed(fans, fan_speed);
 
-        if (settings == NULL) {
-            /* Could not read configfile */
-            if(verbose) {
-                printf("Couldn't read configfile\n");
+	printf("Polling interval set to %d seconds\n", polling_interval);
 
-                if(daemonize) {
-                    syslog(LOG_WARNING, "Couldn't read configfile");
-                }
-            }
+	printf("Sleeping for %d seconds to get first temp delta\n", polling_interval);
 
-        } else {
-            /* Read configfile values */
-            result = settings_get_int(settings, "general", "min_fan_speed");
+	sleep(polling_interval);
 
-            if (result != 0) {
-                min_fan_speed = result;
-            }
+	step_up   = (float)(max_fan_speed - min_fan_speed) / (float)( (max_temp - high_temp) * (max_temp - high_temp + 1) / 2 );
+	step_down = (float)(max_fan_speed - min_fan_speed) / (float)( (max_temp - low_temp)  * (max_temp - low_temp + 1)  / 2 );
 
-            result = settings_get_int(settings, "general", "max_fan_speed");
+	while (1) {
+		old_temp = new_temp;
+		new_temp = get_temp(sensors);
 
-            if (result != 0) {
-                max_fan_speed = result;
-            }
+		if (new_temp >= max_temp && fan_speed != max_fan_speed) {
+			fan_speed = max_fan_speed;
+		}
 
-            result = settings_get_int(settings, "general", "low_temp");
+		if (new_temp <= low_temp && fan_speed != min_fan_speed) {
+			fan_speed = min_fan_speed;
+		}
 
-            if (result != 0) {
-                low_temp = result;
-            }
+		temp_change = new_temp - old_temp;
 
-            result = settings_get_int(settings, "general", "high_temp");
+		if (temp_change > 0 && new_temp > high_temp && new_temp < max_temp) {
+			steps = ( new_temp - high_temp ) * ( new_temp - high_temp + 1 ) / 2;
+			fan_speed = max( fan_speed, ceil(min_fan_speed + steps * step_up) );
+		}
 
-            if (result != 0) {
-                high_temp = result;
-            }
+		if (temp_change < 0 && new_temp > low_temp && new_temp < max_temp) {
+			steps = ( max_temp - new_temp ) * ( max_temp - new_temp + 1 ) / 2;
+			fan_speed = min( fan_speed, floor(max_fan_speed - steps * step_down) );
+		}
 
-            result = settings_get_int(settings, "general", "max_temp");
+		printf("Old %d: new: %d, change: %d, speed: %d\n", old_temp, new_temp, temp_change, fan_speed);
 
-            if (result != 0) {
-                max_temp = result;
-            }
+		set_fan_speed(fans, fan_speed);
 
-            result = settings_get_int(settings, "general", "polling_interval");
+		fflush(stdout);
 
-            if (result != 0) {
-                polling_interval = result;
-            }
-
-            /* Destroy the settings object */
-            settings_delete(settings);
-        }
-    }
-}
-
-
-void mbpfan()
-{
-    int old_temp, new_temp, fan_speed, steps;
-    int temp_change;
-    int step_up, step_down;
-
-    retrieve_settings(NULL);
-
-    sensors = retrieve_sensors();
-    fans = retrieve_fans();
-    set_fans_man(fans);
-
-    new_temp = get_temp(sensors);
-
-    fan_speed = min_fan_speed;
-    set_fan_speed(fans, fan_speed);
-
-    if(verbose) {
-        printf("Sleeping for 2 seconds to get first temp delta\n");
-
-        if(daemonize) {
-            syslog(LOG_INFO, "Sleeping for 2 seconds to get first temp delta");
-        }
-    }
-    sleep(2);
-
-    step_up = (float)( max_fan_speed - min_fan_speed ) /
-              (float)( ( max_temp - high_temp ) * ( max_temp - high_temp + 1 ) / 2 );
-
-    step_down = (float)( max_fan_speed - min_fan_speed ) /
-                (float)( ( max_temp - low_temp ) * ( max_temp - low_temp + 1 ) / 2 );
-
-    while(1) {
-        old_temp = new_temp;
-        new_temp = get_temp(sensors);
-
-        if(new_temp >= max_temp && fan_speed != max_fan_speed) {
-            fan_speed = max_fan_speed;
-        }
-
-        if(new_temp <= low_temp && fan_speed != min_fan_speed) {
-            fan_speed = min_fan_speed;
-        }
-
-        temp_change = new_temp - old_temp;
-
-        if(temp_change > 0 && new_temp > high_temp && new_temp < max_temp) {
-            steps = ( new_temp - high_temp ) * ( new_temp - high_temp + 1 ) / 2;
-            fan_speed = max( fan_speed, ceil(min_fan_speed + steps * step_up) );
-        }
-
-        if(temp_change < 0 && new_temp > low_temp && new_temp < max_temp) {
-            steps = ( max_temp - new_temp ) * ( max_temp - new_temp + 1 ) / 2;
-            fan_speed = min( fan_speed, floor(max_fan_speed - steps * step_down) );
-        }
-
-        if(verbose) {
-            printf("Old Temp %d: New Temp: %d, Fan Speed: %d\n", old_temp, new_temp, fan_speed);
-
-            if(daemonize) {
-                syslog(LOG_INFO, "Old Temp %d: New Temp: %d, Fan Speed: %d", old_temp, new_temp, fan_speed);
-            }
-        }
-
-        set_fan_speed(fans, fan_speed);
-
-        if(verbose) {
-            printf("Sleeping for %d seconds\n", polling_interval);
-            fflush(stdout);
-
-            if(daemonize) {
-                syslog(LOG_INFO, "Sleeping for %d seconds", polling_interval);
-            }
-        }
-
-        sleep(polling_interval);
-    }
+		sleep(polling_interval);
+	}
 }
