@@ -1,14 +1,21 @@
 [Unit]
-Description=A fan manager daemon for MacBook Pro
-After=syslog.target
-After=sysinit.target
+Description = A fan manager daemon for Apple machines
+
+After = sysinit.target syslog.target
+
 
 [Service]
-Type=simple
-ExecStart=/usr/sbin/mbpfan -f
-ExecReload=/usr/bin/kill -HUP $MAINPID
-PIDFile=/var/run/mbpfan.pid
-Restart=always
+ExecStart  = /usr/sbin/mbpfan -f
+ExecReload = /usr/bin/kill -HUP $MAINPID
+
+PIDFile = /var/run/mbpfan.pid
+
+Restart    = always
+RestartSec = 3
+
 
 [Install]
-WantedBy=sysinit.target
+WantedBy = sysinit.target
+
+
+# vim: set syntax=systemd filetype=systemd ts=2 sw=2 tw=0 noet :

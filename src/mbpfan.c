@@ -1,29 +1,19 @@
-/**
- *  mbpfan.c - automatically control fan for MacBook Pro
- *  Copyright (C) 2010  Allan McRae <allan@archlinux.org>
- *  Modifications by Rafael Vega <rvega@elsoftwarehamuerto.org>
- *  Modifications (2012) by Ismail Khatib <ikhatib@gmail.com>
- *  Modifications (2012-present) by Daniel Graziotin <daniel@ineed.coffee> [CURRENT MAINTAINER]
- *  Modifications (2017-present) by Robert Musial <rmusial@fastmail.com>
+/* mbpfan.c - automatically control fan for MacBook Pro
  *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ * Copyright (C) 2010  Allan McRae <allan@archlinux.org>
+ * Modifications by Rafael Vega <rvega@elsoftwarehamuerto.org>
+ * Modifications (2012) by Ismail Khatib <ikhatib@gmail.com>
+ * Modifications (2012-present) by Daniel Graziotin <daniel@ineed.coffee> [CURRENT MAINTAINER]
+ * Modifications (2017-present) by Robert Musial <rmusial@fastmail.com>
+ * Modifications (2018-present) by Kenneth Malinich <kennygprs@gmail.com>
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * Notes:
+ *   Assumes any number of processors and fans (max. 10)
+ *   It uses only the temperatures from the processors as input.
+ *   Requires coretemp and applesmc kernel modules to be loaded.
+ *   Requires root use
  *
- *
- *  Notes:
- *    Assumes any number of processors and fans (max. 10)
- *    It uses only the temperatures from the processors as input.
- *    Requires coretemp and applesmc kernel modules to be loaded.
- *    Requires root use
- *
- *  Tested models: see README.md
+ * Tested models: see README.md
  */
 
 

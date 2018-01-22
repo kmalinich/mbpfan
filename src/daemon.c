@@ -1,21 +1,9 @@
-/**
- *  Copyright (C) 2012  Peter Lombardo <http://peterlombardo.wikidot.com/linux-daemon-in-c>
- *  Modifications (2012) by Ismail Khatib <ikhatib@gmail.com>
+/*  Copyright (C) 2012  Peter Lombardo <http://peterlombardo.wikidot.com/linux-daemon-in-c>
+ *  Modifications (2012)         by Ismail Khatib <ikhatib@gmail.com>
  *  Modifications (2012-present) by Daniel Graziotin <daniel@ineed.coffee>
  *  Modifications (2017-present) by Robert Musial <rmusial@fastmail.com>
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
+ *  Modifications (2018-present) by Kenneth Malinich <kennygprs@gmail.com>
  */
-
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -146,7 +134,6 @@ void go_daemon(void (*fan_control)()) {
 
 		if (write_pid(current_pid) == 0) {
 			printf("ERROR: Can not create a .pid file at: %s. Aborting\n", PROGRAM_PID);
-
 			exit(EXIT_FAILURE);
 		}
 		else {
@@ -155,7 +142,6 @@ void go_daemon(void (*fan_control)()) {
 	}
 	else {
 		printf("ERROR: a previously created .pid file exists at: %s.\n Aborting\n", PROGRAM_PID);
-
 		exit(EXIT_FAILURE);
 	}
 

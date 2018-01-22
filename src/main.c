@@ -1,21 +1,6 @@
-/**
- *  Copyright (C) (2012-present) Daniel Graziotin <daniel@ineed.coffee>
- *  Modifications (2017-present) by Robert Musial <rmusial@fastmail.com>
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- */
-
-/**
- * Code formatted with astyle -A3 -s --break-blocks=all --add-brackets *.c *.h
+/* Copyright (C) (2012-present) Daniel Graziotin <daniel@ineed.coffee>
+ * Modifications (2017-present) by Robert Musial <rmusial@fastmail.com>
+ * Modifications (2018-present) by Kenneth Malinich <kennygprs@gmail.com>
  */
 
 #include <stdio.h>
@@ -31,7 +16,7 @@
 #include "minunit.h"
 
 const char *PROGRAM_NAME = "mbpfan";
-const char *PROGRAM_PID = "/var/run/mbpfan.pid";
+const char *PROGRAM_PID  = "/var/run/mbpfan.pid";
 
 const char *CORETEMP_PATH = "/sys/devices/platform/coretemp.0";
 const char *APPLESMC_PATH = "/sys/devices/platform/applesmc.768";
@@ -41,18 +26,13 @@ void print_usage(int argc, char *argv[]) {
 		printf("Usage: %s OPTION(S) \n", argv[0]);
 		printf("Options:\n");
 		printf("\t-h Show this help screen\n");
-		printf("\t-f Run in foreground\n");
 		printf("\t-t Run the tests\n");
 		printf("\n");
 	}
 }
 
-
 void check_requirements() {
-	/*
-	 * Check for root
-	 */
-
+	// Check for root
 	uid_t uid=getuid(), euid=geteuid();
 
 	if (uid != 0 || euid != 0) {
@@ -60,9 +40,7 @@ void check_requirements() {
 		exit(EXIT_FAILURE);
 	}
 
-	/**
-	 * Check for coretemp and applesmc modules
-	 */
+	// Check for coretemp and applesmc modules
 	DIR* dir = opendir(CORETEMP_PATH);
 
 	if (ENOENT == errno) {
@@ -86,7 +64,7 @@ void check_requirements() {
 int main(int argc, char *argv[]) {
 	int c;
 
-	while( (c = getopt(argc, argv, "hftv|help")) != -1) {
+	while( (c = getopt(argc, argv, "ht|help")) != -1) {
 		switch(c) {
 			case 'h':
 				print_usage(argc, argv);
