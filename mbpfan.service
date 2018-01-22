@@ -5,7 +5,7 @@ After = sysinit.target syslog.target
 
 
 [Service]
-ExecStart  = /usr/sbin/mbpfan -f
+ExecStart  = /usr/sbin/mbpfan
 ExecReload = /usr/bin/kill -HUP $MAINPID
 
 PIDFile = /var/run/mbpfan.pid
