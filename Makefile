@@ -9,7 +9,7 @@ CONF = mbpfan.conf
 DOC = README.md
 MAN = mbpfan.8.gz
 
-COPT = 
+COPT =
 CC = cc
 OBJFLAG = -o
 BINFLAG = -o
