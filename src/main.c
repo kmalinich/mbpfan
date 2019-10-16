@@ -16,7 +16,7 @@
 #include "minunit.h"
 
 const char *PROGRAM_NAME = "mbpfan";
-const char *PROGRAM_PID  = "/var/run/mbpfan.pid";
+const char *PROGRAM_PID  = "/run/mbpfan.pid";
 
 const char *CORETEMP_PATH = "/sys/devices/platform/coretemp.0";
 const char *APPLESMC_PATH = "/sys/devices/platform/applesmc.768";

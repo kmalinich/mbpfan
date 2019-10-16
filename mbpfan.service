@@ -5,13 +5,26 @@ After = sysinit.target syslog.target
 
 
 [Service]
+Type = simple
+
+User  = root
+Group = root
+
+CPUSchedulingPolicy   = fifo
+CPUSchedulingPriority = 99
+LimitNOFILE           = 65536
+Nice                  = -20
+OOMScoreAdjust        = -1000
+
 ExecStart  = /usr/sbin/mbpfan
 ExecReload = /usr/bin/kill -HUP $MAINPID
 
-PIDFile = /var/run/mbpfan.pid
+PIDFile = /run/mbpfan.pid
 
 Restart    = always
 RestartSec = 3
+
+TimeoutStopSec = 30
 
 
 [Install]

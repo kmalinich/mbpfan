@@ -103,18 +103,20 @@ void signal_handler(int signal) {
 		case SIGTERM:
 			printf("Received SIGTERM signal\n");
 			cleanup_and_exit(EXIT_SUCCESS);
+			break;
 
 		case SIGQUIT:
 			printf("Received SIGQUIT signal\n");
 			cleanup_and_exit(EXIT_SUCCESS);
+			break;
 
 		case SIGINT:
 			printf("Received SIGINT signal\n");
 			cleanup_and_exit(EXIT_SUCCESS);
+			break;
 
 		default:
 			printf("Unhandled signal (%d) %s\n", signal, strsignal(signal));
-			break;
 	}
 }
 
